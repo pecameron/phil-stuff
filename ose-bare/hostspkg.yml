@@ -11,6 +11,10 @@
   - name: install pip3 ansible
     shell: pip3 install ansible
 
+    # openshift_additional.repo is 3.10 latest
+  - name: copy files/openshift_additional.repo
+    copy: src=files/openshift_additional.repo dest=/etc/yum.repos.d/openshift_additional.repo
+
   - name: install packages
     action: >
       {{ ansible_pkg_mgr }} name={{ item }} state=present
@@ -34,4 +38,18 @@
       - nfs-utils
       - nfs4-acl-tools
       - libnfsidmap
+      - wget
+      - git
+      - bind-utils
+      - bridge-utils
+      - bash-completion
+      - atomic-openshift-excluder
+      - atomic-openshift-docker-excluder
+      - openshift-ansible
+      - openshift-ansible-docs
+      - openshift-ansible-playbooks
+      - openshift-ansible-roles
+
+# - name: update packages
+#   shell: dnf -y update
 

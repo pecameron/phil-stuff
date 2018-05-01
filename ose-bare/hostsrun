@@ -27,14 +27,29 @@ then
   exit 0
 fi
 
-
-# repairs damage from install and restarts the daemons
-if [ ${action} == "post" ]
+# this playbook installs the cluster
+if [ ${action} == "cluster" ]
 then
-  ansible-playbook -i hosts5 hosts5post1.yml
+  ansible-playbook -i osehosts /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml -e 'ansible_python_interpreter=/usr/bin/python3'
   exit 0
 fi
 
-echo "hosts5run pkg|nfs|docker|post"
+# this playbook uninstalls the cluster
+if [ ${action} == "uninstall" ]
+then
+  ansible-playbook -i osehosts /usr/share/ansible/openshift-ansible/playbooks/adhoc/uninstall.yml -e 'ansible_python_interpreter=/usr/bin/python3'
+  exit 0
+fi
+
+# this playbook gets the ose facts for the cluster
+if [ ${action} == "facts" ]
+then
+  ansible-playbook -i osehosts /usr/share/ansible/openshift-ansible/playbooks/byo/openshift_facts.yml -e 'ansible_python_interpreter=/usr/bin/python3'
+  exit 0
+fi
+
+
+
+echo "hosts5run pkg|nfs|docker|cluster|uninstall|facts"
 exit 1
 

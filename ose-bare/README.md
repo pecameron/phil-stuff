@@ -430,7 +430,739 @@ Nfs is set up on master since no pods will run there.
 ================================================================
 Configure and restart docker
 
+Docker storage is not set up. This results in docker using a file
+for storage.
+
 ./hostsrun docker
 
 ================================================================
 
+Install openshift-ansible on the laptop
+
+On the laptop, copy the OCP repo to /etc/yum.repos.d/openshift_additional.repo
+$ sudo cp files/openshift_additional.repo /etc/yum.repos.d/openshift_additional.repo
+
+On the laptop install openshift-ansible
+$ sudo dnf install -y openshift-ansible
+
+================================================================
+Some additional items:
+
+Edit the /etc/sysconfig/docker file and add --insecure-registry 172.30.0.0/16
+to the OPTIONS parameter. For example:
+OPTIONS='--selinux-enabled --insecure-registry 172.30.0.0/16'
+
+
+The hosts in the cluster have 4 NICs. Two are 1Ge and 2 are 10Ge connected
+to a private network switch. Lab network access is on one of the 1Ge NICs (eno3).
+We will setup the two 10Ge NICs one for cluster internal traffic and the other
+for nfs access. No particular reason, they are there so lets use them.
+
+In general netdev22 will be OCP master and it will be used by ansible to install OCP.
+
+Disable iptables - (may already be disabled)
+The Openshift Ansible, in a later step, installs and configures firewalld.
+At this point make sure iptables is disables on all nodes. Since this is
+a lab configuration for test purposes there is little security concern.
+
+On each host:
+# systemctl stop iptables
+# systemctl disable iptables
+
+
+After the cluster is installed we will configure firewalld rules.
+
+
+Set up the 10Ge NICs
+10.253.0.0/24 on eno1 will be used for nfs and 10.253.1.0/24 on eno2
+will be used for internal cluster traffic. Both are statically configured
+and started on boot.
+
+
+We will install the puddle and verify proper operation of the cluster
+before setting up the development environment.
+
+Notifications about the availability of new puddles arrive in email.
+For this example we will use a 3.6 build, New AtomicOpenShift-3.10 Puddle: latest
+
+http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/3.10/latest
+
+The automated development builds create puddles that can be installed to
+work with specific versions of openshift.
+
+The puddles are found in:
+http://download-node-02.eng.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/
+Index of /rcm-guest/puddles/RHAOS/AtomicOpenShift
+Name Last modified Size Description
+Parent Directory -
+3.1/  01-May-2017 16:57 -
+3.2/  20-Apr-2017 10:59 -
+3.3/  02-May-2017 06:45 -
+3.4/  02-May-2017 09:13 -
+3.5/  02-May-2017 11:43 -
+3.6/  01-May-2017 23:25 -
+3.7/  12-Apr-2018 04:42 -   
+3.8/  11-Apr-2018 03:14 -   
+3.9/  27-Apr-2018 13:00 -   
+3.10/ 01-May-2018 13:21 - 
+
+
+
+The container images are found in
+brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
+with the expected image names tagged with the version v3.10.1,
+or similar. The image repository is set up in a later step.
+
+
+================================================================
+
+Installing Openshift v3 (OCP)
+
+$ ./hostsrun cluster
+
+Uninstall the OCP cluster (leave the rest of the setup alone)
+
+$ ./hostsrun install
+
+
+When this completes "ssh root@netdev22a" and verify that the nodes are present:
+# oc get node
+NAME STATUS AGE
+netdev22a Ready,SchedulingDisabled 11m
+netdev28a Ready 11m
+netdev35a Ready 11m
+
+
+Because the needed images are in the puddle and not in default locations
+the pods don't start.
+
+
+# oc get po
+NAME READY STATUS RESTARTS AGE
+docker-registry-1-deploy 0/1 Pending 0 17m
+registry-console-1-deploy 0/1 ContainerCreating 0 17m
+router-1-deploy 0/1 Pending 0 18m
+
+
+
+docker-registry doesn't start because netdev22 is region=infra and it is not scheduable. Edit the dc and change the nodeSelector.region to primary.
+# oc edit dc/docker-registry
+...
+nodeSelector:
+region: primary
+...
+
+
+
+Also in the dc/docker-registry, the default router image is not found since we need the one in the puddle:
+image: registry.access.redhat.com/openshift3/ose-haproxy-router:v3.6.61
+
+
+
+The Image from puddle is:
+image: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-haproxy-router:v3.6.61
+
+
+
+After Verification:
+# atomic-openshift-excluder exclude
+
+
+
+The cluster is now installed.
+
+================================================================
+
+
+Post Install
+Firewalld
+Firewalld is set up by ansible. Additional rules are needed for nfs and operation on the additional networks
+
+Set up firewalld rules for nfs (port 2049) and em1,em2 networks on all hosts.
+
+
+
+# firewall-cmd --list-all
+# firewall-cmd --zone=public --add-port=2049/tcp --permanent
+# firewall-cmd --zone=public --add-port=8443/tcp --permanent
+# firewall-cmd --zone=public --add-port=8444/tcp --permanent
+# firewall-cmd --zone=public --add-port=4001/tcp --permanent
+# firewall-cmd --zone=public --add-port=9090/tcp --permanent
+# firewall-cmd --zone=public --add-port=8053/udp --permanent
+# firewall-cmd --zone=public --add-source=10.253.0.0/16 --permanent
+# firewall-cmd --zone=public --add-source=10.254.0.0/16 --permanent
+# firewall-cmd --reload
+# firewall-cmd --list-all
+public (active)
+target: default
+icmp-block-inversion: no
+interfaces: em1 em2 em3
+sources: 10.253.0.0/16 10.254.0.0/16
+services: ssh dhcpv6-client
+ports: 10250/tcp 80/tcp 443/tcp 4789/udp 2049/tcp
+protocols:
+masquerade: no
+forward-ports:
+source-ports:
+icmp-blocks:
+rich rules:
+
+
+
+Mount nfs
+Now mount /opt/openshift/bin on each host.
+# mount -a
+
+
+
+Set the hostname to the labnet Name
+Set the hostname on each node. For example node netdev35 is done as follows:
+# echo wsfd-netdev35.ntdv.lab.eng.bos.redhat.com > /etc/hostname
+
+Fixup Image Configuration
+There are some changes needed to correctly find the images.
+
+
+
+On master edit imageConfig to latest
+/etc/origin/master/master-config.yaml
+...
+imageConfig:
+format: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-${component}:latest
+....
+
+
+
+On each node edit imageConfig to latest
+/etc/origin/node/node-config.yaml
+...
+imageConfig:
+format: brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-${component}:latest
+...
+
+
+
+On each node run:
+systemctl daemon-reload
+
+
+
+On master run:
+systemctl restart atomic-openshift-master.service
+
+
+
+On each node run:
+systemctl restart atomic-openshift-node.service
+
+
+
+Fixup Image Configuration in Docker
+The puddle images are in:
+brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
+Verify that Ansible has properly configured docker and docker-registry.
+
+
+
+On each node:
+# vi /etc/sysconfig/docker
+...
+ADD_REGISTRY='--add-registry brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888 <rest of line>'
+...
+INSECURE_REGISTRY='--insecure-registry brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888 <rest of line>'
+...
+If changes were needed run:
+# systemctl daemon-reload
+# systemctl restart docker
+
+
+
+Install Cluster Docker Registry Persistent Storage
+The docker registry is installed by Ansible. Pods that you create that are to run on the cluster are pushed to the default docker-registry. By default registry storage is temporary and is lost when the registry pod is restarted. In an earlier step we reserved room for a persistent docker registry. Here is how to set it up.
+
+
+
+By default the docker registry volume is not set up.
+
+# oc get dc/docker-registry -o yaml
+
+...
+volumes:
+- emptyDir: {}
+name: registry-storage
+
+...
+
+
+
+Set up the persistent volume:
+
+# oc volume deploymentconfigs/docker-registry \
+--add --overwrite --name=registry-storage --mount-path=/registry \
+--source='{"nfs": { "server": "10.253.0.22", "path": "/home/registry"}}'
+The docker registry is accessed via the service:
+
+# oc get svc docker-registry
+NAME CLUSTER-IP EXTERNAL-IP PORT(S) AGE
+docker-registry 172.30.138.33 <none> 5000/TCP 21h
+
+
+
+Add the registry service account to the list of users allowed to run privileged containers:
+# oc edit scc privileged
+Add a lines under users with the user name
+system:serviceaccount:default:registry.
+system:serviceaccount:default:router
+
+
+
+Restart the registry:
+# oc deploy --latest dc/docker-registry
+# oc get po -o wide
+NAME READY STATUS RESTARTS AGE IP NODE
+docker-registry-4-zj5hb 1/1 Running 0 14m 10.130.0.6 netdev28a
+registry-console-1-nxhtw 0/1 CrashLoopBackOff 924 3d 10.130.0.3 netdev28a
+
+
+
+On netdev28, get the docker container ID
+# docker ps
+CONTAINER ID IMAGE COMMAND CREATED STATUS PORTS NAMES
+28ad931e8005 brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-docker-registry@sha256:54e15633ab54592825a8b01569aca7340e33b2f811ffd6ea4f171f9fef391660 "/bin/sh -c 'DOCKER_R" 2 minutes ago Up 2 minutes k8s_registry_docker-registry-4-zj5hb_default_674790
+look at the registry
+# docker exec -it 28ad931e8005 find /registry
+/registry
+/registry/phil28
+/registry/phil35
+
+
+
+Bring up router
+Delete the (non working) router
+# oc delete dc/router
+
+
+
+Create a new router:
+# oadm router --replicas=1 \
+--images=brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-haproxy-router:latest
+
+
+
+Verify it came up
+
+# oc get po -o wide
+
+
+
+Accessing the Cluster Docker Registry
+To access the registry directly, such as to perform docker push or docker pull operations, you must first log in to the registry using an access token.
+
+
+
+Ensure you are logged in to OpenShift as a regular user (system:admin doesn't have a token):
+# oc login -u root
+
+
+
+Get your access token:
+# oc whoami -t
+
+<token>
+
+
+
+oc get svc
+# oc get svc docker-registry
+NAME CLUSTER-IP EXTERNAL-IP PORT(S) AGE
+docker-registry 172.30.138.33 <none> 5000/TCP 1d
+
+
+
+Log in to the Docker registry on each node using same token
+# docker login -u admin -p <token> 172.30.138.33:5000
+
+You can now tag built docker images with the repository:
+
+# docker tag openshift/origin-haproxy-router-dev 172.30.138.33:5000/openshift/origin-haproxy-router-dev
+
+
+
+And push them to the registry:
+
+# docker push 172.30.138.33:5000/openshift/origin-haproxy-router-dev
+
+
+
+You may need to login to docker from time to time.
+
+
+
+Add the docker-repository to the Docker Configuration
+Get the address of the docker-registry service:# oc get svc docker-registry
+NAME CLUSTER-IP EXTERNAL-IP PORT(S) AGE
+docker-registry 172.30.138.33 <none> 5000/TCP 1d
+
+
+
+On each node:
+# vi /etc/sysconfig/docker
+...
+ADD_REGISTRY='--add-registry 172.30.138.33:5000 <rest of line>'
+...
+INSECURE_REGISTRY='--insecure-registry 172.30.138.33:5000 <rest of line>'
+...
+
+
+
+On each node:
+# vi /usr/lib/systemd/system/docker.service
+...
+ExecStart=/usr/bin/dockerd-current \
+--add-runtime docker-runc=/usr/libexec/docker/docker-runc-current \
+--default-runtime=docker-runc \
+--authorization-plugin=rhel-push-plugin \
+--exec-opt native.cgroupdriver=systemd \
+--userland-proxy-path=/usr/libexec/docker/docker-proxy-current \
+--insecure-registry=172.30.138.33:5000 \
+$OPTIONS \
+...
+
+
+Now restart docker on each node:
+
+# systemctl daemon-reload
+# systemctl restart docker
+
+
+
+Make root an admin
+This permits root to push images to the docker-registry.
+
+# oadm policy add-cluster-role-to-user cluster-admin root
+
+
+
+OCP Development Environment
+Now that we have the cluster up running a recent puddle we can make changes to origin and test the results.The following is one of several ways to go about developing on Openshift. This was written during the OCP 3.6 development cycle. Things will change as time goes on.
+
+
+
+There are three areas of development. Each is handled differently.
+
+Develop commands
+Develop openshift daemon changes
+Develop container image changes
+
+
+The general development cycle uses github tools and Openshift project procedures.
+
+The development is done on a forked clone of  openshift/origin,  this example, is on a clone of origin on branch master.
+https: //github.com/openshift/origin.git
+
+In practice you will have your own forked clone and work on branches that you define.
+
+
+
+Details of the development processes follow.
+
+
+
+Develop commands
+This is the simplest process. Just make changes to sources in origin, make and test the new image.
+
+This can be done as long as the daemon APIs don't change because of the build.
+
+
+
+Develop Openshift Daemon Changes
+In this case the changes are made to the origin sources and built as above. The resulting Openshift executable must replace openshift on each node and the daemons must be restarted.
+
+
+
+This example sets up openshift and its needed links in a new directory /opt/openshift/bin and uses NFS to share the directory. Systemd startup on each node is modified to run the new images.
+
+
+
+Develop Container Image Changes
+In this case the changes are made in the origin sources and built. The new/modified containers are generated, tagged and pushed to the docker-registry. The openshift deployment configuration is modified to use the image from the repository.
+
+The pods are deleted and automatically restarted with the new image.
+
+
+
+This is the most complex development process. The product builds an Openshift RPM and the image build uses that. The image build also builds all images. Both of these processes take substantial time. This example update the existing image with a new layer containing openshift and files from the origin/images directory for the image that is being built.
+
+
+
+OCP Development
+First set up a development environment on the cluster. Development can be done anywhere. Out of convenience it is done as the root user on netdev22 (the master node).
+
+
+
+Configure Git
+Git is the source control tool and it is convenient to set it up similar to the following:
+
+
+
+# cat ~/.gitconfig
+[gui]
+recentrepo = /root/cluster-perf
+[user]
+name = XXXX XXXXXXX
+email = xxxxxxxx@redhat.com
+[sendemail]
+smtpserver = smtp.corp.redhat.com
+suppresscc = all
+chainreplyto = false
+[core]
+editor = vim
+[alias]
+st = status
+co = checkout
+br = branch
+up = rebase
+ci = commit
+[credential]
+helper = cache
+[push]
+default = simple
+
+
+
+Install GO
+The version of go must match the version of the product you are building. For OCP 3.6, 3.5, 3.4, 3.3 use go version 1.7.4. For version 3.7 when Kubernetes 1.7 is merged, use 1.8.1. Using the wrong compiler causes difficult to understand problems.
+
+
+
+On the chosen development node (master node):
+# wget https://storage.googleapis.com/golang/go1.7.4.linux-amd64.tar.gz
+
+
+
+Instructions to install go:
+https://golang.org/doc/install
+
+
+
+# cd /usr/local
+# tar xfz go1.7.4.linux-amd64.tar.gz
+
+
+
+Add /usr/local/go/bin to the PATH environment variable. You can do this by adding this line to your /etc/profile (for a system-wide installation) or $HOME/.profile or $HOME/.bashrc:
+export PATH=/usr/local/go/bin:$PATH
+
+
+
+Source the changes:
+
+. ~/.bashrc
+
+
+
+Verify the running version:
+
+# go version
+go version go1.7.4 linux/amd64
+
+
+
+
+
+Clone Origin Repository
+# git clone http://github.com/openshift/origin
+# cd origin
+# make
+
+
+Local Configuration Changes
+There are a number of things that need to be changed for the cluster to run the built image. The content of the built Openshift, both images and soft links need to be set up in an nfs served area and the nodes must start the daemons from that area.
+
+
+
+Local access on the Build Host
+The development cycle makes Openshift and copies it to the nfs share. Testing is done using this image, so set up access in $PATH
+
+~/.bashrc
+export PATH=/opt/openshift/bin:$PATH
+
+
+
+. ~/.bashrc
+
+
+
+Change ExecStart to Point to the NFS Share
+On the master node:
+# cp /usr/lib/systemd/system/atomic-openshift-master.service /usr/lib/systemd/system/atomic-openshift-master.service.save
+
+# vi /usr/lib/systemd/system/atomic-openshift-master.service
+
+ExecStart=/opt/openshift/bin/openshift start node --config=${CONFIG_FILE} $OPTIONS
+
+
+
+On all nodes:
+# cp /usr/lib/systemd/system/atomic-openshift-node.service /usr/lib/systemd/system/atomic-openshift-node.service.save
+# vi /usr/lib/systemd/system/atomic-openshift-node.service
+ExecStart=/opt/openshift/bin/openshift start node --config=${CONFIG_FILE} $OPTIONS
+
+
+
+Set up Soft Links in NFS Share
+cd /opt/openshift/bin
+ln -s openshift kube-apiserver
+ln -s openshift kube-controller-manager
+ln -s openshift kubectl
+ln -s openshift kubelet
+ln -s openshift kube-proxy
+ln -s openshift kubernetes
+ln -s openshift kube-scheduler
+ln -s openshift oadm
+ln -s openshift openshift-deploy
+ln -s openshift openshift-docker-build
+ln -s openshift openshift-recycle
+ln -s openshift openshift-router
+ln -s openshift openshift-sti-build
+ln -s openshift origin
+ln -s openshift osadm
+ln -s openshift osc
+
+
+
+General Development Cycle
+The general development cycle is along these lines:
+
+Make code changes
+Build ( make clean && make)
+Stop cluster
+Copy openshift to NFS share
+Start cluster
+Make container images
+Docker tag and push to Openshift cluster registry
+Delete running pod and wait for it to be restarted
+Not all of these steps are needed depending on what you are working on.
+
+
+
+Build
+# cd origin
+
+# make clean && make
+
+The make clean is not always need. It is needed when you rebase.
+
+
+
+Stop the cluster:
+systemctl stop atomic-openshift-master.service
+systemctl stop atomic-openshift-node.service
+ssh root@netdev28 systemctl stop atomic-openshift-node.service
+ssh root@netdev35 systemctl stop atomic-openshift-node.service
+
+Next copy the built files to the /opt/openshift/bin NFS store:
+cp _output/local/bin/linux/amd64/openshift /opt/openshift/bin/openshift
+cp _output/local/bin/linux/amd64/oc /opt/openshift/bin/oc
+cp _output/local/bin/linux/amd64/loopback /opt/openshift/bin/loopback
+cp _output/local/bin/linux/amd64/sdn-cni-plugin /opt/openshift/bin/sdn-cni-plugin
+cp _output/local/bin/linux/amd64/host-local /opt/openshift/bin/host-local
+cp pkg/sdn/plugin/sdn-cni-plugin/80-openshift-sdn.conf /opt/openshift/bin/80-openshift-sdn.conf
+cp pkg/sdn/plugin/bin/openshift-sdn-ovs /opt/openshift/bin/openshift-sdn-ovs
+
+Usually the only interesting file tso copy are oc and openshift, since that is where the changes are usually made.
+
+
+
+Reload the Daemons and Restart the Cluster
+On each node:
+systemctl daemon-reload
+
+ssh root@netdev28 systemctl daemon-reload
+
+ssh root@netdev35 systemctl daemon-reload
+
+
+Start the cluster:
+systemctl start atomic-openshift-master.service
+systemctl start atomic-openshift-node.service
+ssh root@netdev28 systemctl start atomic-openshift-node.service
+ssh root@netdev35 systemctl start atomic-openshift-node.service
+
+
+
+You are now running your changes to the openshift daemons. Developing in the containers such as the haproxy-router require additional steps. You need to build a new docker image and run it.
+
+
+
+Develop Containers
+Build the Container Image
+The simplest approach is to use:
+
+cd origin
+
+./hack/build-local-images.py haproxy-router
+
+
+
+This rebuilds the listed container, in this case haproxy-router.
+
+It grabs the container from some source, maybe docker.io and adds a new layer that overlays openshift and all of the configuration files in the container.
+
+The results:
+
+# docker images | head
+REPOSITORY TAG IMAGE ID CREATED SIZE
+openshift/origin-haproxy-router latest 172952b56785 21 hours ago 1.912 GB
+
+...
+
+Tag and Push the Image to the Openshift Registry
+
+
+Login to Openshift Registry using a docker login and Openshift token
+
+
+
+You must be logged in as a regular user to get a token
+# oc login -u root
+token=$(oc whoami -t)
+# oc login -u system:admin
+
+
+
+Docker login to each node (netdev22 does the push, the others pull) all must be logged in.
+# docker login -u admin -p $token 172.30.138.33:5000
+
+
+
+Tag the image and push it.
+
+The tag name is the Registry's Service IP adderss and port and the desired image name. This must match the image name in the pod.
+docker tag openshift/origin-haproxy-router 172.30.138.33:5000/openshift/origin-haproxy-router-dev
+docker push 172.30.138.33:5000/openshift/origin-haproxy-router-dev
+
+
+
+Fix the router Deployment Configuration for the Image
+
+You can either create a router using the --images= option or edit the existing router deployment configuration.
+
+
+
+# oc edit dc/router
+...
+image: 172.30.138.33:5000/openshift/origin-haproxy-router-dev
+imagePullPolicy: Always
+...
+
+The save forces a redeployment and a new pod.
+
+
+
+You can now test and debug the container.
+
+
+
+Post script
+The above is a snapshot in time and since software continually evolves it may become obsolete. The key steps will likely always be needed in some form and hopefully this will be a useful guide for a while.

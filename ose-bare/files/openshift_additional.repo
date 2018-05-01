@@ -1,0 +1,5 @@
+[AtomicOpenShift-3.10-Puddle]
+name=AtomicOpenShift-3.10-Puddle
+baseurl=http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/3.10/latest/$basearch/os
+gpgcheck=0
+enabled=1

@@ -1,0 +1,35 @@
+# ################################
+# Create an OSEv3 group that contains the masters and nodes groups
+[OSEv3:children]
+masters
+nodes
+# Set variables common for all OSEv3 hosts
+[OSEv3:vars]
+# SSH user, this user should allow ssh based auth without requiring a password
+ansible_ssh_user=root
+openshift_auth_type=allowall
+oreg_url=brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-${component}:${version}
+openshift_docker_additional_registries=brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888,registry.ops.openshift.com
+openshift_docker_insecure_registries=brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888,registry.ops.openshift.com
+# If ansible_ssh_user is not root, ansible_sudo must be set to true
+#ansible_sudo=true
+# OCP/OSE puddle
+#Version 3.10
+openshift_additional_repos=[{'id': 'AtomicOpenShift-3.10-Puddle', 'name': 'AtomicOpenShift-3.10-Puddle', 'baseurl': 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/3.10/latest/x86_64/os', 'enabled': 1, 'gpgcheck': 0}]
+
+# Allow all auth
+openshift_master_identity_providers=[{'name': 'allow_all', 'login': 'true', 'challenge': 'true', 'kind': 'AllowAllPasswordIdentityProvider'}]
+# kublet args
+# openshift_node_kubelet_args={'max-pods':['4096']}
+# Configure the multi-tenant SDN plugin (default is 'redhat/openshift-ovs-subnet')
+os_sdn_network_plugin_name='redhat/openshift-ovs-multitenant'
+deployment_type=openshift-enterprise
+# host group for masters
+[masters]
+netdev22a openshift_hostname=netdev22a openshift_ip=10.253.1.22 openshift_public_hostname=wsfd-netdev22.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.9
+# host group for nodes, includes region info
+[nodes]
+netdev22a openshift_hostname=netdev22a openshift_ip=10.253.1.22 openshift_public_hostname=wsfd-netdev22.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.9 openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
+netdev28a openshift_hostname=netdev28a openshift_ip=10.253.1.28 openshift_public_hostname=wsfd-netdev28.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.22 openshift_node_labels="{'region': 'infra', 'zone': 'north'}"
+netdev35a openshift_hostname=netdev35a openshift_ip=10.253.1.35 openshift_public_hostname=wsfd-netdev35.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.36 openshift_node_labels="{'region': 'infra', 'zone': 'south'}"
+

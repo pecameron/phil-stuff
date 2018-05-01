@@ -1,0 +1,24 @@
+---
+# This playbook sets up docker on the 3 hosts
+# This is a bare metal install - 1 host per node
+
+- name: Install docker tasks for 3 host, 3 node, cluster
+  hosts: cluster
+  user: root
+
+  # This set of tasks prepares the host to be part of the cluster
+  tasks:
+  - name: fix the docker-network file
+    copy: src=files/docker-network dest=/etc/sysconfig/docker-network
+
+  - name: fix the registries-conf file
+    copy: src=files/registries-fedora-conf dest=/etc/containers/registries.conf
+
+  # enable and restart docker
+  - name: enable docker 
+    shell: systemctl enable docker
+
+  - name: restart docker
+    service: name=docker state=restarted
+
+
