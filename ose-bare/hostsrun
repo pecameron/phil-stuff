@@ -1,0 +1,33 @@
+#!/bin/bash
+
+action="XX"
+if [ X$1 != "X" ]
+then
+  action=$1
+fi
+
+# this playbook sets up the hosts to be part of a cluster.
+if [ ${action} == "pkg" ]
+then
+  ansible-playbook -i hosts hostspkg.yml
+  exit 0
+fi
+
+# this playbook sets up nfs on the hosts in the cluster.
+if [ ${action} == "nfs" ]
+then
+  ansible-playbook -i hosts hostsnfs.yml
+  exit 0
+fi
+
+
+# repairs damage from install and restarts the daemons
+if [ ${action} == "post" ]
+then
+  ansible-playbook -i hosts5 hosts5post1.yml
+  exit 0
+fi
+
+echo "hosts5run pkg|nfs|post"
+exit 1
+

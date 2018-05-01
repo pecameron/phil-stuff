@@ -1,0 +1,37 @@
+---
+# This playbook sets up the 3 hosts to be part of a cluster.
+# This is a bare metal install - 1 host per node
+
+- name: Install tasks for 3 host, 3 node, cluster
+  hosts: cluster
+  user: root
+
+  # This set of tasks prepares the host to be part of the cluster
+  tasks:
+  - name: install pip3 ansible
+    shell: pip3 install ansible
+
+  - name: install packages
+    action: >
+      {{ ansible_pkg_mgr }} name={{ item }} state=present
+    with_items:
+      - yum
+      - yum-utils
+#     - python2-dbus
+      - python3-dbus
+      - firewalld
+      - NetworkManager
+      - docker
+      - libselinux-python
+      - iptables-services
+      - vim
+      - emacs-nox
+      - gcc
+      - gdb
+      - crash
+      - net-tools
+      - tcpdump
+      - nfs-utils
+      - nfs4-acl-tools
+      - libnfsidmap
+

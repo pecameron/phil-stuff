@@ -1,0 +1,31 @@
+# The selected machines from beaker are:
+# wsfd-netdev22.ntdv.lab.eng.bos.redhat.com
+# wsfd-netdev28.ntdv.lab.eng.bos.redhat.com
+# wsfd-netdev35.ntdv.lab.eng.bos.redhat.com
+# /etc/hosts has the ip name and fqn
+
+[cluster:children]
+masters
+nodes
+
+[masters:children]
+netdev22a_master
+
+[netdev22a_master]
+netdev22a
+
+[nodes:children]
+osehost22
+osehost28
+osehost35
+
+[osehost22]
+netdev22a
+
+[osehost28]
+netdev28a
+
+[osehost35]
+netdev35a
+
+

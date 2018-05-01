@@ -1,0 +1,2 @@
+/home/registry *(rw,all_squash)
+/home/openshift/bin *(rw,sync,all_squash)

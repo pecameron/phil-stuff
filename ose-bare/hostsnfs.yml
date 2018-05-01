@@ -1,0 +1,84 @@
+---
+# This playbook sets up the 3 hosts for nfs
+# This is a bare metal install - 1 host per node
+#
+# master serves nfs since it is not used for pods
+# Set up cluster registry /home/registry
+# Set up development store for origin /home/openshift/bin
+# Set up mount points on all nodes
+# Fix up fstab on all nodes
+# Setup exportfs on master
+# Start nfs daemons
+
+  # Setup on master
+- name: Configure nfs for cluster on master
+  hosts: masters
+  user: root
+
+  tasks:
+  - name: make a the /home/registry directory
+    file:
+      state: directory
+      path: /home/registry
+      mode: 0777
+      owner: nobody
+      group: nobody
+
+  # Development objects go here
+  - name: make a the /home/openshift/bin directory
+    file:
+      state: directory
+      path: /home/openshift/bin
+      mode: 0777
+      owner: nobody
+      group: nobody
+
+  - name: set up exports file
+    copy: src=files/exports dest=/etc/exports
+
+  - name: do the exportfs
+    shell: exportfs -a
+
+
+  # Setup on nodes
+- name: Configure nfs for cluster
+  hosts: cluster
+  user: root
+
+  tasks:
+  # Cluster registry goes here
+  - name: make a the /registry directory
+    file:
+      state: directory
+      path: /registry
+      mode: 0777
+      owner: nobody
+      group: nobody
+
+  # Development objects go here
+  - name: make a the /opt/openshift/bin directory
+    file:
+      state: directory
+      path: /opt/openshift/bin
+      mode: 0777
+      owner: nobody
+      group: nobody
+
+  # 10.253.0.0/24 is nfs network
+  - name: Add /opt/openshift/bin to fstab
+    shell: echo "10.253.0.22:/home/openshift/bin/ /opt/openshift/bin nfs defaults 0 0" >> /etc/fstab
+
+  - name: Add /registry to fstab
+    shell: echo "10.253.0.22:/home/registry /registry nfs defaults 0 0" >> /etc/fstab
+
+  # restart the nfs daemons
+  - name: enable nfs 
+    shell: systemctl enable nfs
+
+  - name: restart nfs
+    service: name=nfs state=restarted
+
+  # mount the directories
+  - name: mount the directories
+    shell: mount -a
+
