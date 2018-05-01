@@ -428,3 +428,9 @@ Nfs is set up on master since no pods will run there.
 
 
 ================================================================
+Configure and restart docker
+
+./hostsrun docker
+
+================================================================
+

@@ -20,6 +20,13 @@ then
   exit 0
 fi
 
+# this playbook sets up docker on the hosts in the cluster.
+if [ ${action} == "docker" ]
+then
+  ansible-playbook -i hosts hostsdocker.yml
+  exit 0
+fi
+
 
 # repairs damage from install and restarts the daemons
 if [ ${action} == "post" ]
@@ -28,6 +35,6 @@ then
   exit 0
 fi
 
-echo "hosts5run pkg|nfs|post"
+echo "hosts5run pkg|nfs|docker|post"
 exit 1
 
