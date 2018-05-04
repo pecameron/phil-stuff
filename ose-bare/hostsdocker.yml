@@ -14,6 +14,15 @@
   - name: fix the registries-conf file
     copy: src=files/registries-fedora-conf dest=/etc/containers/registries.conf
 
+  - name: set up docker storage
+    shell: docker-storage-setup
+
+  # If docker doesn't start due to:
+  # Error starting daemon: error initializing graphdriver: devmapper: Unable to take
+  # rm -rf /var/lib/docker
+  # docker-storage-setup --reset
+  # docker-storage-setup
+  # systemctl start docker
   # enable and restart docker
   - name: enable docker 
     shell: systemctl enable docker

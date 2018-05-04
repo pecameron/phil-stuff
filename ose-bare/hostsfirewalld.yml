@@ -1,0 +1,74 @@
+---
+# This playbook sets up firewalld on the 3 hosts
+# This is a bare metal install - 1 host per node
+#
+
+  # Setup on nodes
+- name: Setup firewalld for cluster
+  hosts: cluster
+  user: root
+
+  tasks:
+  # Cluster registry goes here
+  # restart the nfs daemons
+  - name: enable firewalld 
+    shell: systemctl enable firewalld
+
+  - name: restart firewalld
+    service: name=firewalld state=restarted
+
+  - name: port 2049 tcp
+    firewalld:
+      port: 2049/tcp
+      permanent: true
+      state: enabled
+
+  - name: port 8443 tcp
+    firewalld:
+      port: 8443/tcp
+      permanent: true
+      state: enabled
+
+  - name: port 8444 tcp
+    firewalld:
+      port: 8444/tcp
+      permanent: true
+      state: enabled
+
+  - name: port 4001 tcp
+    firewalld:
+      port: 4001/tcp
+      permanent: true
+      state: enabled
+
+  - name: port 9090 tcp
+    firewalld:
+      port: 9090/tcp
+      permanent: true
+      state: enabled
+
+  - name: port 8053 udp
+    firewalld:
+      port: 8053/udp
+      permanent: true
+      state: enabled
+
+  - name: source 10.253.0.0/16 tcp
+    firewalld:
+      source: 10.253.0.0/16
+      zone: public
+      permanent: true
+      state: enabled
+
+# firewall-cmd --list-all
+# firewall-cmd --zone=public --add-port=2049/tcp --permanent
+# firewall-cmd --zone=public --add-port=8443/tcp --permanent
+# firewall-cmd --zone=public --add-port=8444/tcp --permanent
+# firewall-cmd --zone=public --add-port=4001/tcp --permanent
+# firewall-cmd --zone=public --add-port=9090/tcp --permanent
+# firewall-cmd --zone=public --add-port=8053/udp --permanent
+# firewall-cmd --zone=public --add-source=10.253.0.0/16 --permanent
+# firewall-cmd --zone=public --add-source=10.254.0.0/16 --permanent
+# firewall-cmd --reload
+# firewall-cmd --list-all
+

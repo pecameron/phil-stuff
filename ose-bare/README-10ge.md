@@ -19,7 +19,7 @@ This installs Fedora 27 and OCP 3.10 development puddles.
 OCP 3.10 uses daemonsets, instead of systemctl, to run the cluster.
 
 This doc describes a simple 3 node install that uses the lab network
-for networking.
+for access to the cluster and a 10Ge NIC for internal cluster networking.
 
 
 The steps are:
@@ -40,6 +40,8 @@ Later steps expand /root while leaving room for the docker thinpool.
 Next install needed packages and configure storage and networking for the
 cluster. This setup provides the needed environment to install Docker
 and Openshift.
+
+The internal cluster network is statically configured. 
 
 Add the OCP 3.10 puddle repo and install openshift-ansible. This is
 the collection of ansible playbooks and roles that install Openshift.
@@ -70,11 +72,17 @@ netdev35 wsfd-netdev35.ntdv.lab.eng.bos.redhat.com 10.19.188.36
 Of the three hosts, netdev22 will be the master and a node, the
 others are nodes.
 
+In this case the hosts have network HW that permits an internal 10Ge
+cluster network and separate 10Ge network for NFS file storage. The
+lab network is 1Ge and is used to access the cluster. None of this
+network setup is required, however since the HW is available, why not
+use it?
+
 The nodes are Dell R730 servers with 2 1Ge NICs and 2 10Ge NICs and
 a 1T disk. The NICs are used as follows:
 
-eno1 10ge - not used
-eno2 10ge - not used
+eno1 10ge 10.253.0.x nfs mount common data store, openshift registry
+eno2 10ge 10.253.1.x internal cluster networking
 eno3 1ge 10.19.188.x lab net interface
 eno4 1 Ge - not used
 
@@ -288,6 +296,115 @@ Install packages
 ./hostsrun pkg
 
 ================================================================
+Customize networking on the hosts:
+eno1 10.253.0.xx is for nfs mounts
+eno2 10.253.1.xx is for cluster internal networking
+
+
+On netdev22
+# cd /etc/sysconfig/network-scripts/
+
+# cat ifcfg-eno1
+BOOTPROTO=none
+IPADDR="10.253.0.22"
+NETMASK="255.255.255.0"
+#BOOTPROTO=dhcp
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=eno1
+UUID=997704ee-6955-358a-b515-5019945845c3
+ONBOOT=yes
+AUTOCONNECT_PRIORITY=-999
+DEVICE=eno1
+
+# cat ifcfg-eno2
+BOOTPROTO="none" <----
+IPADDR="10.253.1.22" <----
+NETMASK="255.255.255.0" <----
+TYPE=Ethernet
+PROXY_METHOD=none
+BROWSER_ONLY=no
+#BOOTPROTO=dhcp
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=eno2
+UUID=f5a5e080-923d-3cfa-934e-038a29e9a5bd
+ONBOOT=yes
+AUTOCONNECT_PRIORITY=-999
+DEVICE=eno2
+
+# ifup eno1
+# ifup eno2
+
+ On netdev28:
+# cd /etc/sysconfig/network-scripts/
+
+# cat ifcfg-eno1
+BOOTPROTO="none" <-----
+IPADDR="10.253.0.28" <-----
+NETMASK="255.255.255.0" <-----
+ONBOOT=yes
+
+# cat ifcfg-eno2
+BOOTPROTO="none"
+IPADDR="10.253.1.28"
+NETMASK="255.255.255.0"
+ONBOOT=yes <-----
+
+# ifup eno1
+# ifup eno2
+
+
+On netdev35:
+# cd /etc/sysconfig/network-scripts/
+
+# cat ifcfg-eno1
+BOOTPROTO="none" <-----
+IPADDR="10.253.0.35" <-----
+NETMASK="255.255.255.0" <-----
+ONBOOT=yes
+
+# cat ifcfg-eno2
+BOOTPROTO="none"
+IPADDR="10.253.1.35"
+NETMASK="255.255.255.0"
+ONBOOT=yes <-----
+
+# ifup eno1
+# ifup eno2
+
+On all nodes add these lines to the /etc/hosts file:
+
+# labnet
+10.19.17.9 netdev22
+10.19.17.22 netdev28
+10.19.17.36 netdev35
+# eno1 net
+10.253.0.22 netdev22b
+10.253.0.28 netdev28b
+10.253.0.35 netdev35b
+# eno2 net
+10.253.1.22 netdev22a
+10.253.1.28 netdev28a
+10.253.1.35 netdev35a
+
+
+At this point you can ping over all the networks.
+
+================================================================
 Set Up Key Exchange on All Nodes
 Ansible uses ssh for everything and since we will be running ansible
 from the master (netdev22) we need to set up shared keys between
@@ -302,12 +419,33 @@ Press <enter> at all prompts
 Now copy the public key to each node and ssh to each interface.
 # ssh-copy-id netdev22
 # ssh netdev22
+# ssh netdev22a
+# ssh netdev22b
 # ssh-copy-id netdev28
 # ssh netdev28
+# ssh netdev28a
+# ssh netdev28b
 # ssh-copy-id netdev35
 # ssh netdev35
+# ssh netdev35a
+# ssh netdev35b
 
 At his point you can ssh to any node from any node over all NICs without passwords.
+
+
+================================================================
+
+Set Up NFS
+
+Nfs is used by the Openshift default Docker Registry and during development
+to share built excutables. All of this is described in later sections. At
+this point we just set up nfs.
+
+NOTE: There are no security concerns since this is a lab cluster.
+
+Nfs is set up on master since no pods will run there.
+
+# ./hostsrun nfs
 
 
 ================================================================
@@ -351,6 +489,12 @@ Edit the /etc/sysconfig/docker file and add --insecure-registry 172.30.0.0/16
 to the OPTIONS parameter. For example:
 OPTIONS='--selinux-enabled --insecure-registry 172.30.0.0/16'
 
+
+The hosts in the cluster have 4 NICs. Two are 1Ge and 2 are 10Ge connected
+to a private network switch. Lab network access is on one of the 1Ge NICs (eno3).
+We will setup the two 10Ge NICs one for cluster internal traffic and the other
+for nfs access. No particular reason, they are there so lets use them.
+
 Disable iptables - (may already be disabled)
 The Openshift Ansible, in a later step, installs the needed iptables rules.
 At this point make sure iptables is disabled on all nodes. Since this is
@@ -359,6 +503,12 @@ a lab configuration for test purposes there is little security concern.
 On each host (may not be needed):
 # systemctl stop iptables
 # systemctl disable iptables
+
+
+Set up the 10Ge NICs
+10.253.0.0/24 on eno1 will be used for nfs and 10.253.1.0/24 on eno2
+will be used for internal cluster traffic. Both are statically configured
+and started on boot.
 
 
 Next install the puddle and verify proper operation of the cluster
@@ -401,7 +551,7 @@ or similar. The image repository is set up in a later step.
 Installing Openshift v3 (OCP)
 
 $ ./hostsrun prereqs
-$ ./hostsrun cluster
+$ ./hostsrun cluster10ge
 
 Uninstall the OCP cluster (leave the rest of the setup alone)
 
@@ -476,12 +626,14 @@ Set up firewalld rules for nfs (port 2049) and eno1,eno2 networks on all hosts.
 # firewall-cmd --zone=public --add-port=4001/tcp --permanent
 # firewall-cmd --zone=public --add-port=9090/tcp --permanent
 # firewall-cmd --zone=public --add-port=8053/udp --permanent
+# firewall-cmd --zone=public --add-source=10.253.0.0/16 --permanent
 # firewall-cmd --reload
 # firewall-cmd --list-all
 public (active)
 target: default
 icmp-block-inversion: no
-interfaces: eno3
+interfaces: eno1 eno2 eno3
+sources: 10.253.0.0/16
 services: ssh dhcpv6-client
 ports: 10250/tcp 80/tcp 443/tcp 4789/udp 2049/tcp
 protocols:
@@ -490,6 +642,12 @@ forward-ports:
 source-ports:
 icmp-blocks:
 rich rules:
+
+
+
+Mount nfs
+Now mount /opt/openshift/bin on each host.
+# mount -a
 
 
 Fixup Image Configuration

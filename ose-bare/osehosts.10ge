@@ -1,6 +1,6 @@
 # ################################
 # Create an OSEv3 group that contains the masters and nodes groups
-# This is for 3 hosts - uses the labnet interfaces (no internal openshift network)
+# This is for 3 hosts - uses 10Ge nic for internal openshift network
 [OSEv3:children]
 masters
 nodes
@@ -71,16 +71,14 @@ os_sdn_network_plugin_name='redhat/openshift-ovs-multitenant'
 
 # host group for masters
 [masters]
-wsfd-netdev22.ntdv.lab.eng.bos.redhat.com
+netdev22a openshift_hostname=netdev22a openshift_ip=10.253.1.22 openshift_public_hostname=wsfd-netdev22.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.9
 
 [etcd]
 wsfd-netdev22.ntdv.lab.eng.bos.redhat.com
 
 # host group for nodes, includes region info
 [nodes]
-wsfd-netdev22.ntdv.lab.eng.bos.redhat.com openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
-
-wsfd-netdev28.ntdv.lab.eng.bos.redhat.com openshift_node_labels="{'region': 'infra', 'zone': 'north'}"
-
-wsfd-netdev35.ntdv.lab.eng.bos.redhat.com openshift_node_labels="{'region': 'infra', 'zone': 'south'}"
+netdev22a openshift_hostname=netdev22a openshift_ip=10.253.1.22 openshift_public_hostname=wsfd-netdev22.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.9 openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
+netdev28a openshift_hostname=netdev28a openshift_ip=10.253.1.28 openshift_public_hostname=wsfd-netdev28.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.22 openshift_node_labels="{'region': 'infra', 'zone': 'north'}"
+netdev35a openshift_hostname=netdev35a openshift_ip=10.253.1.35 openshift_public_hostname=wsfd-netdev35.ntdv.lab.eng.bos.redhat.com openshift_public_ip=10.19.188.36 openshift_node_labels="{'region': 'infra', 'zone': 'south'}"
 

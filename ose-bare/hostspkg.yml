@@ -26,7 +26,6 @@
       - firewalld
       - NetworkManager
       - docker
-      - libselinux-python
       - iptables-services
       - vim
       - emacs-nox

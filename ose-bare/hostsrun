@@ -13,7 +13,9 @@ then
   exit 0
 fi
 
+# OPTIONAL
 # this playbook sets up nfs on the hosts in the cluster.
+# used with 10ge
 if [ ${action} == "nfs" ]
 then
   ansible-playbook -i hosts hostsnfs.yml
@@ -27,10 +29,32 @@ then
   exit 0
 fi
 
+# this playbook installs the cluster prerequisites
+if [ ${action} == "prereqs" ]
+then
+  ansible-playbook -i osehosts /usr/share/ansible/openshift-ansible/playbooks/prerequisites.yml -e 'ansible_python_interpreter=/usr/bin/python3'
+  exit 0
+fi
+
 # this playbook installs the cluster
 if [ ${action} == "cluster" ]
 then
   ansible-playbook -i osehosts /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml -e 'ansible_python_interpreter=/usr/bin/python3'
+  exit 0
+fi
+
+# this playbook installs the cluster
+if [ ${action} == "cluster10ge" ]
+then
+  ansible-playbook -i osehosts.10ge /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml -e 'ansible_python_interpreter=/usr/bin/python3'
+  exit 0
+fi
+
+# this playbook installs the master
+# when cluster install fails, this can continue the install
+if [ ${action} == "master" ]
+then
+  ansible-playbook -i osehosts /usr/share/ansible/openshift-ansible/playbooks/openshift-master/config.yml -e 'ansible_python_interpreter=/usr/bin/python3'
   exit 0
 fi
 
@@ -50,6 +74,6 @@ fi
 
 
 
-echo "hosts5run pkg|nfs|docker|cluster|uninstall|facts"
+echo "hosts5run pkg|nfs|docker|prereqs|cluster|cluster10ge|master|firewalld|uninstall|facts"
 exit 1
 
