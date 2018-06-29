@@ -15,11 +15,15 @@ This describes how to set up an OCP (Openshift V3) cluster using a OCP
 development Puddle on bare metal lab machines. It modifies the cluster
 to permit Openshift/origin development and debug.
 
-This installs Fedora 27 and OCP 3.10 development puddles.
+This installs Fedora 28 and OCP 3.10 development puddles.
 OCP 3.10 uses daemonsets, instead of systemctl, to run the cluster.
 
 This doc describes a simple 3 node install that uses the lab network
 for networking.
+
+The development host is another beaker machine because docker gets 
+bogged down on the cluster machines. Also, local registry on the 
+build machine serves the images.
 
 
 The steps are:
@@ -66,6 +70,8 @@ Set up 3 beaker machines to be a 3 node cluster:
 netdev22 wsfd-netdev22.ntdv.lab.eng.bos.redhat.com 10.19.188.9 (master)
 netdev28 wsfd-netdev28.ntdv.lab.eng.bos.redhat.com 10.19.188.22
 netdev35 wsfd-netdev35.ntdv.lab.eng.bos.redhat.com 10.19.188.36
+
+Beaker machine for development environment is netdev31
 
 Of the three hosts, netdev22 will be the master and a node, the
 others are nodes.
@@ -156,8 +162,7 @@ Don't forget to "take" the loan.
 ==========================
 Provision Systems Using Beaker:
 
-Provision each host in turn with the same system image. This example uses Fedora-27 Server
-Beaker Fedora-28 does not have a Server image (as of 201805020I).
+Provision each host in turn with the same system image. This example uses Fedora-28 Server.
 
 
 Click on the system name, then press provision (on left side).
@@ -168,20 +173,20 @@ https://beaker.engineering.redhat.com/view/wsfd-netdev35.ntdv.lab.eng.bos.redhat
 
 
 Distro:
-Family: Fedora27
+Family: Fedora28
 Tag: None selected
-Distro: Fedora27
-DistroTree: Fedora27 Server x86_64
+Distro: Fedora28
+DistroTree: Fedora28 Server x86_64
 
 
 Press PROVISION
 
 
-This is installing a current DistroTree: Fedora-27. There are a limited
+This is installing a current DistroTree: Fedora-28. There are a limited
 number of snapshots on beaker at any point in time and at some point this
 version will be deleted. When this happens or when you want a more recent
 snapshot, edit the beaker files in /etc/yum.repos.d, just grep for
-Fedora-27 and edit the new version from
+Fedora-28 and edit the new version from
 http://download.eng.bos.redhat.com/nightly/
 On each host, edit all the /etc/yum.repos.d/ files that mention the image.
 After that do a yum update on each host.
@@ -215,6 +220,8 @@ Login from your laptop to verify access:
 # ssh to root@<hostname>
 
 =================================================
+=================================================
+=================================================
 System Post Install - Before the Openshift Install
 
 The Openshift documentation provides details on installing the cluster.
@@ -240,7 +247,7 @@ The OCP registry can be placed on any host in the cluster. In this example
 it is on master. So the disk on master is shared between the OCP registry
 and Docker persistent storage.
 
-Fedora-27 uses LVM to manage the disk. There are root, and swap logical
+Fedora-28 uses LVM to manage the disk. There are root, and swap logical
 volumes that consume a small portion of the disk.
 
 netdev22 (the master) will end up with the openshift registry and nfs
@@ -284,10 +291,49 @@ The hosts file contains the inventory of all of the hosts
 in the cluster and hostsplay.yaml is the playbook to install and set
 up the hosts to be part of the future cluster. 
 
+====== Notes ======
+The puddle is configured in 
+files/openshift_additional.repo
+
+Next install the puddle and verify proper operation of the cluster
+before continuing.
+
+Notifications about the availability of new puddles arrive in email.
+For this example we will use a 3.10 build, New AtomicOpenShift-3.10 Puddle: latest
+
+http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/3.10/latest
+
+The automated development builds create puddles that can be installed to
+work with specific versions of openshift.
+
+The puddles are found in:
+http://download-node-02.eng.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/
+Index of /rcm-guest/puddles/RHAOS/AtomicOpenShift
+Name Last modified Size Description
+Parent Directory -
+3.1/  01-May-2017 16:57 -
+3.2/  20-Apr-2017 10:59 -
+3.3/  02-May-2017 06:45 -
+3.4/  02-May-2017 09:13 -
+3.5/  02-May-2017 11:43 -
+3.6/  01-May-2017 23:25 -
+3.7/  12-Apr-2018 04:42 -   
+3.8/  11-Apr-2018 03:14 -   
+3.9/  27-Apr-2018 13:00 -   
+3.10/ 01-May-2018 13:21 - 
+
+The container images are found in
+brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
+with the expected image names tagged with the version v3.10.1,
+or similar. The image repository is set up in a later step.
+===================
+
 Install packages
 ./hostsrun pkg
 
 ================================================================
+========== may not need this  =================
+
 Set Up Key Exchange on All Nodes
 Ansible uses ssh for everything and since we will be running ansible
 from the master (netdev22) we need to set up shared keys between
@@ -326,6 +372,7 @@ Try resetting docker storage:
 - # docker-storage-setup
 
 ================================================================
+=================== MAY NOT NEED THIS ====================
 
 Install openshift-ansible on the laptop
 
@@ -335,7 +382,7 @@ $ sudo cp files/openshift_additional.repo /etc/yum.repos.d/openshift_additional.
 On the laptop install openshift-ansible
 $ sudo dnf install -y openshift-ansible
 
-On each host:
+On laptop:
 # rpm -qa | grep openshift-a
 openshift-ansible-docs-3.10.0-0.32.0.git.0.bb50d68.el7.noarch
 openshift-ansible-playbooks-3.10.0-0.32.0.git.0.bb50d68.el7.noarch
@@ -347,10 +394,7 @@ Note: 3.10.0-0.32 or newer is required.
 ================================================================
 Some additional items:
 
-Edit the /etc/sysconfig/docker file and add --insecure-registry 172.30.0.0/16
-to the OPTIONS parameter. For example:
-OPTIONS='--selinux-enabled --insecure-registry 172.30.0.0/16'
-
+===== not needed on fresh install ====
 Disable iptables - (may already be disabled)
 The Openshift Ansible, in a later step, installs the needed iptables rules.
 At this point make sure iptables is disabled on all nodes. Since this is
@@ -359,49 +403,33 @@ a lab configuration for test purposes there is little security concern.
 On each host (may not be needed):
 # systemctl stop iptables
 # systemctl disable iptables
-
-
-Next install the puddle and verify proper operation of the cluster
-before continuing.
-
-Notifications about the availability of new puddles arrive in email.
-For this example we will use a 3.10 build, New AtomicOpenShift-3.10 Puddle: latest
-
-http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/3.10/latest
-
-The automated development builds create puddles that can be installed to
-work with specific versions of openshift.
-
-The puddles are found in:
-http://download-node-02.eng.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift/
-Index of /rcm-guest/puddles/RHAOS/AtomicOpenShift
-Name Last modified Size Description
-Parent Directory -
-3.1/  01-May-2017 16:57 -
-3.2/  20-Apr-2017 10:59 -
-3.3/  02-May-2017 06:45 -
-3.4/  02-May-2017 09:13 -
-3.5/  02-May-2017 11:43 -
-3.6/  01-May-2017 23:25 -
-3.7/  12-Apr-2018 04:42 -   
-3.8/  11-Apr-2018 03:14 -   
-3.9/  27-Apr-2018 13:00 -   
-3.10/ 01-May-2018 13:21 - 
-
-
-
-The container images are found in
-brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888
-with the expected image names tagged with the version v3.10.1,
-or similar. The image repository is set up in a later step.
+=======================================
 
 
 ================================================================
 
-Installing Openshift v3 (OCP)
+Installing Openshift v3 (OCP 3.10)
 
 $ ./hostsrun prereqs
+
+./osehosts is the hosts file for installing OCP. cni is set,
+however ovs and sdn get installed anyway.
+os_sdn_network_plugin_name='cni'
+
 $ ./hostsrun cluster
+
+The cluster install fails trying to install the web_console.
+
+NOTE: 3.10 
+ovs and sdn are always installed.
+
+$ ssh root@netdev22
+# oc project openshift-sdn
+# oc delete ds sdn
+# oc delete ds ovs
+
+More cleanup may be needed...
+NOTE: 3.10
 
 Uninstall the OCP cluster (leave the rest of the setup alone)
 
@@ -409,12 +437,28 @@ $ ./hostsrun uninstall
 
 
 When this completes "ssh root@netdev22a" and verify that the nodes are present:
-# oc get node
-NAME STATUS AGE
-netdev22a Ready,SchedulingDisabled 11m
-netdev28a Ready 11m
-netdev35a Ready 11m
+# oc get nodes
+NAME                                        STATUS     ROLES           AGE       VERSION
+wsfd-netdev22.ntdv.lab.eng.bos.redhat.com   NotReady   infra,master    29m       v1.10.0+b81c8f8
+wsfd-netdev28.ntdv.lab.eng.bos.redhat.com   NotReady   compute,infra   26m       v1.10.0+b81c8f8
+wsfd-netdev35.ntdv.lab.eng.bos.redhat.com   NotReady   compute,infra   26m       v1.10.0+b81c8f8
 
+On to setting up the network:
+
+================================================================
+============== ovnpre.yml ==========
+OVN - ovn
+
+This needs to be done on each node.
+  - name: iptables 6641
+    shell: iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6641 -j ACCEPT
+  - name: iptables 6642
+    shell: iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6642 -j ACCEPT
+
+  - name: Ensure GENEVE's UDP port isn't firewalled
+    shell: /usr/share/openvswitch/scripts/ovs-ctl --protocol=udp --dport=6081 enable-protocol
+
+$ ./hostsrun ovnpre
 
 ================================================================
 

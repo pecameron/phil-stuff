@@ -1,0 +1,19 @@
+---
+# This playbook sets up OVN firewall rules
+# This is a bare metal install - 1 host per node
+
+- name: Install firewall rules
+  hosts: cluster
+  user: root
+
+  # This set of tasks prepares the host to be part of the cluster
+  tasks:
+  - name: rule 6641
+    shell: iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6641 -j ACCEPT
+  - name: rule 6642
+    shell: iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6642 -j ACCEPT
+
+  # this is done in the container running ovs after it comes up
+# - name: Ensure GENEVE's UDP port isn't firewalled
+#   shell: /usr/share/openvswitch/scripts/ovs-ctl --protocol=udp --dport=6081 enable-protocol
+

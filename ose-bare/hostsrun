@@ -50,6 +50,13 @@ then
   exit 0
 fi
 
+# this playbook sets up ovn firewall rules
+if [ ${action} == "ovnpre" ]
+then
+  ansible-playbook -i hosts ovn-pre.yml
+  exit 0
+fi
+
 # this playbook installs the master
 # when cluster install fails, this can continue the install
 if [ ${action} == "master" ]
@@ -74,6 +81,6 @@ fi
 
 
 
-echo "hosts5run pkg|nfs|docker|prereqs|cluster|cluster10ge|master|firewalld|uninstall|facts"
+echo "hosts5run pkg|nfs|docker|prereqs|cluster|cluster10ge|ovnpre|aster|uninstall|facts"
 exit 1
 
