@@ -1,0 +1,434 @@
+#!/bin/bash
+# set -x
+# see if cluster is pulling images
+
+# $1 is the cluster-dir
+# $2 is the optional "gather" or log-bundle dir
+
+if [[ ${1:-XX} == "XX" ]] ; then
+	echo " Run in CNO top level directory"
+	echo " Must provide cluster-dir as parameter"
+	exit 1
+fi
+tgtdir=${1}
+
+now=$(date "+%Y%m%d%H%MS")
+
+gather () {
+echo "===================================================="
+echo "Doing gather bootstrap"
+rm -f ${tgtdir}/log-bundle-*.tar.gz
+
+openshift-install --dir ${tgtdir} gather bootstrap --key ${HOME}/.ssh/id_rsa
+if [[ $? -ne 0 ]] ; then
+	echo "gather bootstrap failed"
+	exit 1
+fi
+
+logb=$(ls ${tgtdir}/log-bundle-*.tar.gz | sed 's/.tar.gz//')
+echo ${logb}
+
+mkdir -p ${logb}
+tar  xfz ${logb}.tar.gz -C ${logb}
+}
+
+releaseImage () {
+echo "===================================================="
+echo "Check bootstrap/journals/release-image.log"
+if [[ ! -f  ${logb}/bootstrap/journals/release-image.log ]] ; then
+  echo "bootstrap/journals/release-image.log file not found"
+  return
+fi
+
+manifest=$(grep "Error reading manifest" ${logb}/bootstrap/journals/release-image.log | wc -l) 
+if [[ ${manifest} -ne 0 ]] ; then
+  echo "----------------------------------------------"
+  echo "    Error reading manifest"
+  echo "    openshift-installer needs to be updated"
+  echo "----------------------------------------------"
+  echo ""
+  return
+fi
+
+pullErr=$(grep "error pulling image" ${logb}/bootstrap/journals/release-image.log | wc -l)
+#echo "${pullErr} Pull Errors: from bootstrap/journals/release-image.log"
+grep "Error pulling image" ${logb}/bootstrap/journals/release-image.log | head -1
+if [[ ${pullErr} -ne 0 ]] ; then
+  echo "${pullErr} Pull Errors: from bootstrap/journals/release-image.log"
+  grep "error pulling image" ${logb}/bootstrap/journals/release-image.log | head -1
+else
+  echo "Pulled images"
+fi
+}
+
+bootkube () {
+echo "===================================================="
+echo "Check bootstrap/journals/bootkube.log"
+if [[ ! -f  ${logb}/bootstrap/journals/bootkube.log ]] ; then
+  echo "bootstrap/journals/bootkube.log file not found"
+  return
+fi
+
+grep "Error: unable to pull" ${logb}/bootstrap/journals/bootkube.log | head -1
+grep "container died" ${logb}/bootstrap/journals/bootkube.log | head -1
+grep "systemd" ${logb}/bootstrap/journals/bootkube.log | head -6
+grep -e " E0130 " ${logb}/bootstrap/journals/bootkube.log | head -4
+echo ""
+grep -e "Pod Status" ${logb}/bootstrap/journals/bootkube.log
+echo ""
+#echo "Checking for more errors"
+#grep -v -e "Error: unable to pull" -e "systemd" -e "podman"  ${logb}/bootstrap/journals/bootkube.log
+#grep -v -e " container " -e "Writing asset" -e " podman" -e " I0130 " \
+#	-e " E0130" -e ": Created " -e ": Skipped " -e ": Failed to create" \
+#	-e " failed to create " -e "Updated status" \
+#	-e "failed to fetch" -e "unable to get REST mapping" \
+#	${logb}/bootstrap/journals/bootkube.log
+#grep -v -e " create " -e " init " -e " start " -e " attach " -e " died " -e " remove "   ${logb}/bootstrap/journals/bootkube.log
+}
+
+crioConfig () {
+echo "===================================================="
+echo "Check bootstrap/journals/crio-configure.log"
+if [[ ! -f  ${logb}/bootstrap/journals/crio-configure.log ]] ; then
+  echo "bootstrap/journals/crio-configure.log file not found"
+  return
+fi
+
+#grep -e "container died" ${logb}/bootstrap/journals/crio-configure.log | head -1
+grep "systemd" ${logb}/bootstrap/journals/crio-configure.log | head -6
+}
+
+kubelet () {
+echo "===================================================="
+echo "Check bootstrap/journals/kubelet.log"
+if [[ ! -f  ${logb}/bootstrap/journals/kubelet.log ]] ; then
+  echo "bootstrap/journals/kubelet.log file not found"
+  return
+fi
+
+w=$(grep "CrashLoopBackOff" ${logb}/bootstrap/journals/kubelet.log | wc -l)
+echo "CrashLoopBackOff occurences: $w"
+e=$(grep "Error" ${logb}/bootstrap/journals/kubelet.log | wc -l)
+echo "Error occurences: $e"
+s=$(grep "status for pod" ${logb}/bootstrap/journals/kubelet.log | wc -l)
+echo "status for pod: $s"
+echo ""
+#grep -n -e "status for pod" -e "CrashLoopBackOff" -e "Error"  ${logb}/bootstrap/journals/kubelet.log
+}
+
+approveCsr () {
+echo "===================================================="
+echo "Check bootstrap/journals/approve-csr.log"
+if [[ ! -f  ${logb}/bootstrap/journals/approve-csr.log ]] ; then
+  echo "bootstrap/journals/approve-csr.log file not found"
+  return
+fi
+
+grep -n  -e "error" -e "was refused"  ${logb}/bootstrap/journals/approve-csr.log
+}
+
+pods() {
+echo "===================================================="
+echo "Check resources/pods.json"
+if [[ ! -f  ${logb}/resources/pods.json ]] ; then
+  echo "resources/pods.json file not found"
+  return
+fi
+
+echo "===================================================="
+echo "Looking for ovn/ovs pods"
+jq '.items[].metadata.name' ${logb}/resources/pods.json | grep -e ovn -e ovs
+
+echo "===================================================="
+jq '.items[].status.conditions[].message' ${logb}/resources/pods.json | grep "unready status"
+
+echo "===================================================="
+jq '.items[].status.conditions[].reason' ${logb}/resources/pods.json | grep -v null
+
+echo "===================================================="
+jq '.items[]' ${logb}/resources/pods.json | grep -e '"reason": "Error"' -e "CrashLoopBackOff"
+
+echo "===================================================="
+jq '.items[].status.containerStatuses' ${logb}/resources/pods.json | grep ovn -A2
+
+}
+
+masters-nodes () {
+echo "===================================================="
+echo "List all masters"
+if [[ ! -f  ${logb}/resources/masters.list ]] ; then
+  echo "resources/masters.list file not found"
+  return
+fi
+cat ${logb}/resources/masters.list
+
+echo "===================================================="
+echo "List all nodes"
+if [[ ! -f  ${logb}/resources/nodes.list ]] ; then
+  echo "resources/nodes.list file not found"
+  return
+fi
+cat ${logb}/resources/nodes.list
+
+echo "===================================================="
+echo "node networking -- resources/nodes.json"
+jq '.items[].status.conditions[3].message' ${logb}/resources/nodes.json
+}
+
+namespaces () {
+echo "===================================================="
+echo "Show ovn namespace -- resources/namespaces.json"
+if [[ ! -f  ${logb}/resources/namespaces.json ]] ; then
+  echo "resources/namespaces.json file not found"
+  return
+fi
+ns=$(jq '.items[].metadata.name' ${logb}/resources/namespaces.json | grep kubernetes)
+echo ${ns}
+if [[ ${ns} == "" ]] ; then
+  echo "----------------------------------------------"
+  echo " openhsift-ovn-kubernetes namespace missing"
+  echo "----------------------------------------------"
+  echo ""
+fi
+}
+
+clusteroperators () {
+echo "===================================================="
+echo "Show ovn in clusteroperators -- resources/clusteroperators.json"
+if [[ ! -f  ${logb}/resources/clusteroperators.json ]] ; then
+  echo "resources/clusteroperators.json file not found"
+  return
+fi
+jq '.items[].status.conditions[].message' ${logb}/resources/clusteroperators.json 
+}
+
+clusterversion () {
+echo "===================================================="
+echo "Show ovn in clusterversion -- resources/clusterversion.json"
+if [[ ! -f  ${logb}/resources/clusterversion.json ]] ; then
+  echo "resources/clusterversion.json file not found"
+  return
+fi
+jq '.items[].status.conditions[].message' ${logb}/resources/clusterversion.json 
+#echo ${ns}
+#if [[ ${ns} == "" ]] ; then
+  #echo "------------------------------------------------------"
+  #echo " openhsift-ovn-kubernetes missing in clusterversion"
+  #echo "------------------------------------------------------"
+  #echo ""
+#fi
+}
+
+configmaps () {
+echo "===================================================="
+echo "Show ovn namespace -- resources/configmaps.json"
+if [[ ! -f  ${logb}/resources/configmaps.json ]] ; then
+  echo "resources/configmaps.json file not found"
+  return
+fi
+ns=$(jq '.items[].metadata.namespace' ${logb}/resources/configmaps.json | grep kubernetes)
+echo ${ns}
+if [[ ${ns} == "" ]] ; then
+  echo "----------------------------------------------"
+  echo " openhsift-ovn-kubernetes namespace missing"
+  echo "----------------------------------------------"
+  echo ""
+fi
+}
+
+csr () {
+echo "===================================================="
+echo "Check certificates -- resources/csr.json"
+if [[ ! -f  ${logb}/resources/csr.json ]] ; then
+  echo "resources/csr.json file not found"
+  return
+fi
+jq '.items[].status.conditions[].message' ${logb}/resources/csr.json 
+}
+
+endpoints () {
+echo "===================================================="
+echo "Show endpoints -- resources/endpoints.json"
+if [[ ! -f  ${logb}/resources/endpoints.json ]] ; then
+  echo "resources/endpoints.json file not found"
+  return
+fi
+ep=$(jq '.items[].subsets' ${logb}/resources/endpoints.json | grep -e ovs -e ovn | grep -v namespace | gawk '{ print $2 }')
+for eep in ${ep} ; do
+  echo "  ${eep}"
+done
+if [[ ${ep} == "" ]] ; then
+  echo "----------------------------------------------"
+  echo " openhsift-ovn-kubernetes endpoints missing"
+  echo "----------------------------------------------"
+  echo ""
+fi
+}
+
+
+events () {
+echo "===================================================="
+echo "Show events -- resources/events.json"
+if [[ ! -f  ${logb}/resources/events.json ]] ; then
+  echo "resources/events.json file not found"
+  return
+fi
+ev=$(jq '.items[].involvedObject.namespace' ${logb}/resources/events.json | grep ovn-kubernetes)
+echo ${ev}
+if [[ ${ev} == "" ]] ; then
+  echo "----------------------------------------------"
+  echo " openhsift-ovn-kubernetes events missing"
+  echo "----------------------------------------------"
+  echo ""
+fi
+}
+
+rolebindings () {
+echo "===================================================="
+echo "Check certificates -- resources/rolebindings.json"
+if [[ ! -f  ${logb}/resources/rolebindings.json ]] ; then
+  echo "resources/rolebindings.json file not found"
+  return
+fi
+ev=$(jq '.items[].metadata.name' ${logb}/resources/rolebindings.json | grep ovn)
+echo ${ev}
+if [[ ${ev} == "" ]] ; then
+  echo "---------------------------------------------------"
+  echo " openhsift-ovn-kubernetes-sbdb rolebinding missing"
+  echo "---------------------------------------------------"
+  echo ""
+fi
+}
+
+roles () {
+echo "===================================================="
+echo "Check certificates -- resources/roles.json"
+if [[ ! -f  ${logb}/resources/roles.json ]] ; then
+  echo "resources/roles.json file not found"
+  return
+fi
+ev=$(jq '.items[].metadata.name' ${logb}/resources/roles.json | grep ovn)
+echo ${ev}
+if [[ ${ev} == "" ]] ; then
+  echo "---------------------------------------------------"
+  echo " openhsift-ovn-kubernetes-sbdb role missing"
+  echo "---------------------------------------------------"
+  echo ""
+fi
+}
+
+services () {
+echo "===================================================="
+echo "Check certificates -- resources/services.json"
+if [[ ! -f  ${logb}/resources/services.json ]] ; then
+  echo "resources/services.json file not found"
+  return
+fi
+ev=$(jq '.items[].metadata.name' ${logb}/resources/services.json | grep ovn)
+echo ${ev}
+if [[ ${ev} == "" ]] ; then
+  echo "---------------------------------------------------"
+  echo " ovn services missing"
+  echo "---------------------------------------------------"
+  echo ""
+fi
+}
+
+
+#-------------------------------------
+logs () {
+#echo "===================================================="
+#echo "List all log files"
+#find ${logb} -name \*log
+
+echo "===================================================="
+echo "CNO - Look for bad networktype"
+grep -r -w -e "NOTICE: Unknown network type" ${logb}/control-plane/*/containers/*.log 2>/dev/null
+
+echo "===================================================="
+echo "Look for container Errors"
+grep -r -w -e Error ${logb}/control-plane/*/containers/*.log 2>/dev/null | head -4
+
+echo "===================================================="
+echo "Look for fatal msg"
+grep -r -w -e "fatal msg" ${logb}/control-plane/*/containers/*.log 2>/dev/null | head -4
+
+echo "===================================================="
+echo "Look for E1125"
+logs=$(find MY-CLUSTER-OVN-2/log-bundle-20191125152251/ -name *.log 2>/dev/null)
+for i in $logs ; do echo $i ; grep E1125 $i | head -3 ; done
+#grep -r -w -e "E1125" ${logb}/control-plane/*/containers/*.log | head -4
+
+echo "===================================================="
+echo "Look for panic"
+if [[ -f  ${logb}/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log ]] ; then
+  grep -r -w -e panic ${logb}/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log | head -4
+
+echo "===================================================="
+echo "Observed a panic"
+  find ${logb} -name \*.log | xargs grep "Observed a panic" | tail -4
+fi
+
+echo "===================================================="
+echo "Look for timeouts"
+grep -r "Timeout error while obtaining addresses" ${logb}
+
+echo "===================================================="
+echo "Look for Error while obtaining gateway"
+grep -r "Error while obtaining gateway" ${logb} | head -3
+
+echo "===================================================="
+echo "Look for failed to get aggregate flow statistics"
+grep -r "failed to get aggregate flow statistics" ${logb} | head -3
+
+echo "===================================================="
+echo "Look for election results"
+grep -r -w -e "election" ${logb}/control-plane/*/containers/ovn*.log 2>/dev/null | head -4
+
+
+}
+
+
+# get the logs from the cluster
+if [[ ${2:-XX} == "gather" ]] ; then
+  gather
+else
+  # use a previously gathered log-bundle
+  if [[ -d ${1}/${2:-XX} ]] ; then
+	logb=${1}/${2}
+  else
+	logb=$(ls ${1}/log-bundle-*.tar.gz | sed 's/.tar.gz//')
+  fi
+fi
+echo logb $logb
+
+echo "===================================================="
+echo "===================================================="
+echo "bootstrap/journals"
+releaseImage
+bootkube
+crioConfig
+approveCsr
+kubelet
+echo "===================================================="
+echo "resources"
+namespaces
+clusteroperators
+clusterversion
+configmaps
+csr
+endpoints
+events
+masters-nodes
+pods
+rolebindings
+roles
+services
+echo "===================================================="
+echo "logs"
+logs
+
+exit 0
+
+
+

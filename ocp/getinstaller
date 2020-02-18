@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Set installDir to where you want to put the installer
+installDir=$OCPinstallDir
+installerRepo=https://openshift-release.svc.ci.openshift.org
+installerBranch=$OCPinstallerBranch
+
+echo "Installing in: $installDir"
+echo "from: $installerBranch"
+
+echo " Getting available installer versions ${installerRepo}"
+cu=$(wget ${installerRepo} -O - | grep -e ${installerBranch} -A2 | grep "Accepted" -B1 | head -1)
+echo " "
+
+inst=$(echo ${cu} | sed 's/<td class="text-monospace"><a class="text-success" href="//' | sed 's/"/ /' | gawk '{ print $1 }')
+echo " Latest Accepted Installer -- ${installerRepo}${inst}"
+art=$(wget ${installerRepo}${inst} -O - | grep "Download the installer" | sed 's/<p><a href="//' | sed 's/"/ /' | gawk '{ print $1 }')
+echo " "
+
+echo $art
+tarfiles=$(wget ${art}  -O - | grep "linux-" | sed 's/<li><a href="//' | sed 's/"/ /' | gawk '{ print $1 }')
+
+rm ${installDir}/*.gz
+for fil in ${tarfiles}
+do
+	(cd ${installDir} ; wget ${art}/${fil} ; tar xfz ${fil} )
+done
+echo " "
+
+echo "Current version is:"
+openshift-install version
