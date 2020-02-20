@@ -1,0 +1,163 @@
+#!/bin/bash
+# set -x
+
+# Analyze ci artifacts
+# ci-analysis $1 $2
+#   $2 is the (optional) dir that contains the artifacts
+#      The CI_DIR environment variable may be used
+#   $1 test is the test to run (default all):
+#     all  - run all tests
+
+if [[ ${2:-XX} == "XX" ]] ; then
+    dir=${CI_DIR:-XX}
+    if [[ ${dir:-XX} == "XX" ]] ; then
+        echo "Must supply directory as either CI_DIR or arg 2"
+        exit 1
+    fi
+else
+	dir=${2}
+fi
+echo "Analyze directory: ${dir}"
+
+test=${1}
+if [[ ${1:-XX} == "XX" ]] ; then
+  test=all
+fi
+echo "Analyze test: ${test}"
+
+
+# ----------------------------------------
+# test functions
+
+panic ()
+{
+	echo "===================================================="
+	echo "  Looking for 'Observed a panic' in the *.log files"
+	find ${dir} -name \*log | xargs grep "Observed a panic"
+}
+
+fatal ()
+{
+	echo "===================================================="
+	echo "  Looking for 'fatal' in the *.log files"
+	files=$(find ${dir} -name \*log)
+	for f in ${files} 
+	do
+		grep "fatal" ${f} -l
+	done
+}
+
+error ()
+{
+	echo "===================================================="
+	echo "  Looking for 'error' in the *.log files"
+	files=$(find ${dir} -name \*log)
+	for f in ${files} 
+	do
+		grep -i -e "ERROR"  ${f} -l
+	done
+	echo "===================================================="
+	echo "  Looking for '^E' in the *.log files"
+	for f in ${files} 
+	do
+		grep -e "^E"  ${f} -l
+	done
+	echo "===================================================="
+	echo "  Looking for ' E ' in the *.log files"
+	for f in ${files} 
+	do
+		grep -e " E " ${f} -l
+	done
+}
+
+refused ()
+{
+	echo "===================================================="
+	echo "  Looking for 'connection refused' in the *.log files"
+	files=$(find ${dir} -name \*log)
+	for f in ${files} 
+	do
+		grep -n -e "connection refused" ${f} -l
+		#grep -n -e "connection reset by peer" ${f} -l
+	done
+}
+
+t6443 ()
+{
+	echo "===================================================="
+	echo "  Looking for ':6443: connect: connection refused' in the *.log files"
+	files=$(find ${dir} -name \*log)
+	for f in ${files} 
+	do
+		grep -n -e ":6443: connect: connection refused" ${f} -l
+	done
+}
+
+notice ()
+{
+	echo "===================================================="
+	echo "  Looking for 'NOTICE' in the *.log files"
+	files=$(find ${dir} -name \*log)
+	for f in ${files} 
+	do
+		grep -e "NOTICE" ${f} -l
+	done
+}
+
+previous ()
+{
+	echo "===================================================="
+	echo "  Looking for non-zero  *previous.log files"
+	files=$(find ${dir} -name \*previous.log)
+	for f in ${files} 
+	do
+		size=$(wc -l ${f} | gawk '{ print $1 }')
+		if [[ ${size} == 0 ]] ; then
+			continue
+		fi
+		echo ${f}
+	done
+}
+
+
+
+# ----------------------------------------
+# main 
+
+case ${test} in
+  "all")
+     panic
+     fatal
+     error
+     refused
+     notice
+     t6443
+     previous
+  ;;
+  "panic")
+     panic
+  ;;
+  "fatal")
+     fatal
+  ;;
+  "error")
+     error
+  ;;
+  "refused")
+     refused
+  ;;
+  "t6443")
+     t6443
+  ;;
+  "notice")
+     notice
+  ;;
+  "previous")
+     previous
+  ;;
+  *)
+    echo "Unknown test"
+  ;;
+esac
+
+exit 0

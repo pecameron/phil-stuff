@@ -1,0 +1,46 @@
+#!/bin/bash
+# set -x
+
+# wrapper for get-ci-artifacts.sh
+
+# When a ci failure occurs this script can download the artifacts 
+# for later offline analysis
+# this takes a while and is not always useful
+# analysis is left to other tools.
+
+# $1 base directory to put results e.g., t12105
+# $2 base url e.g., https://gcsweb-ci.svc.ci.openshift.org/gcs/origin-ci-test/logs/release-openshift-origin-installer-e2e-aws-upgrade/12105/
+
+# does not gather:
+#   must-gather
+#   heap
+#   prometheus.tar
+# gunzips:
+#   prometheus-target-metadata.json
+#   statefulsets.json
+#   replicasets.json
+#   daemonsets.json
+#   deployments.json
+#   openapi.json
+
+echo "get-ci-artifacts"
+if [[ ${1:-XX} == "XX" ]] ; then
+	echo " Must provide dir to save results"
+	exit 1
+fi
+if [[ ${2:-XX} == "XX" ]] ; then
+	echo " Must provide url of artifacts"
+	exit 1
+fi
+mkdir -p $1
+
+echo " results are here: $1"
+echo " artifacts are here: $2"
+echo " artifacts are here: $2" > $1/artifacts
+
+rm -f /tmp/cilog
+
+# get-ci-artifacts.sh is expected to be in the PATH
+get-ci-artifacts.sh $1 $2
+
+exit 0
