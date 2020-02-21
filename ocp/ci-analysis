@@ -119,6 +119,28 @@ previous ()
 	done
 }
 
+badcert ()
+{
+	echo "===================================================="
+	echo "  Looking for 'bad certificate' in the *.log files"
+	files=$(find ${dir} -name \*log)
+	for f in ${files} 
+	do
+		grep -e "bad certificate" ${f} -l
+	done
+}
+
+oomkilled ()
+{
+	echo "===================================================="
+	echo "  Looking for 'OOMKilled' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "OOMKilled" ${f} -l
+	done
+}
+
 
 
 # ----------------------------------------
@@ -133,6 +155,8 @@ case ${test} in
      notice
      t6443
      previous
+     badcert
+     oomkilled
   ;;
   "panic")
      panic
@@ -154,6 +178,12 @@ case ${test} in
   ;;
   "previous")
      previous
+  ;;
+  "badcert")
+     badcert
+  ;;
+  "oomkilled")
+     oomkilled
   ;;
   *)
     echo "Unknown test"
