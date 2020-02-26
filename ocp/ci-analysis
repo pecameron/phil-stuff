@@ -8,6 +8,23 @@
 #   $1 test is the test to run (default all):
 #     all  - run all tests
 
+# TODO: possible additional tests
+# cni not found up to 5 times
+# ovn kube prev log with panic
+
+help ()
+{
+    echo "commands:
+    echo "  panic fatal error refused notice t6443 previous badcert"
+    echo "  oomkilled missingcni bearertoken healthz blockingPicker sandbox"
+}
+
+if [[ ${1:-XX} == "help" ]] ; then
+    help
+    exit 0
+fi
+
+
 if [[ ${2:-XX} == "XX" ]] ; then
     dir=${CI_DIR:-XX}
     if [[ ${dir:-XX} == "XX" ]] ; then
@@ -141,6 +158,61 @@ oomkilled ()
 	done
 }
 
+missingcni ()
+{
+	echo "===================================================="
+	echo "  Looking for 'Missing CNI default network' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "Missing CNI default network" ${f} -l
+	done
+}
+
+bearertoken ()
+{
+	echo "===================================================="
+	echo "  Looking for 'invalid bearer token' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "invalid bearer token" ${f} -l
+	done
+}
+
+healthz ()
+{
+	echo "===================================================="
+	echo "  Looking for 'healthz check failed' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "healthz check failed" ${f} -l
+	done
+}
+
+blockingPicker ()
+{
+	echo "===================================================="
+	echo "  Looking for 'blockingPicker' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "blockingPicker" ${f} -l
+	done
+}
+
+sandbox ()
+{
+	echo "===================================================="
+	echo "  Looking for 'Failed to create pod sandbox' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "Failed to create pod sandbox" ${f} -l
+	done
+}
+
 
 
 # ----------------------------------------
@@ -157,6 +229,11 @@ case ${test} in
      previous
      badcert
      oomkilled
+     missingcni
+     bearertoken
+     healthz
+     blockingPicker
+     sandbox
   ;;
   "panic")
      panic
@@ -184,6 +261,21 @@ case ${test} in
   ;;
   "oomkilled")
      oomkilled
+  ;;
+  "missingcni")
+     missingcni
+  ;;
+  "bearertoken")
+     bearertoken
+  ;;
+  "blockingPicker")
+     blockingPicker
+  ;;
+  "healthz")
+     healthz
+  ;;
+  "sandbox")
+     sandbox
   ;;
   *)
     echo "Unknown test"
