@@ -3,10 +3,17 @@
 
 # Analyze ci artifacts
 # ci-analysis $1 $2
+# CI_DIR=myartifactdir ci-analysis sandbox
+
 #   $2 is the (optional) dir that contains the artifacts
 #      The CI_DIR environment variable may be used
 #   $1 test is the test to run (default all):
 #     all  - run all tests
+
+# In general the items reported here may or may not be errors.
+# The context is important. So this gives a place to dive in and
+# look around. As time goes on this script will do more context
+# analysis.
 
 # TODO: possible additional tests
 # cni not found up to 5 times
@@ -16,7 +23,8 @@ help ()
 {
     echo "commands:"
     echo "  panic fatal error refused notice t6443 previous badcert"
-    echo "  oomkilled missingcni bearertoken healthz blockingPicker sandbox"
+    echo "  oomkilled missingcni bearertoken healthz blockingPicker"
+    echo "  sandbox lease"
 }
 
 if [[ ${1:-XX} == "help" ]] ; then
@@ -216,6 +224,19 @@ sandbox ()
 }
 
 
+lease ()
+{
+	# bz1796844 Worker nodes not being registered as nodes
+	echo "===================================================="
+	echo "  Looking for 'failed to ensure node lease exists' in the artifact files"
+	files=$(find ${dir} -type f )
+	for f in ${files} 
+	do
+		grep -e "failed to ensure node lease exists" ${f} -l
+	done
+}
+
+
 
 # ----------------------------------------
 # main 
@@ -236,6 +257,7 @@ case ${test} in
      healthz
      blockingPicker
      sandbox
+     lease
   ;;
   "panic")
      panic
@@ -278,6 +300,9 @@ case ${test} in
   ;;
   "sandbox")
      sandbox
+  ;;
+  "lease")
+     lease
   ;;
   *)
     echo "Unknown test"
