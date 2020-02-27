@@ -14,7 +14,7 @@
 
 help ()
 {
-    echo "commands:
+    echo "commands:"
     echo "  panic fatal error refused notice t6443 previous badcert"
     echo "  oomkilled missingcni bearertoken healthz blockingPicker sandbox"
 }
@@ -160,6 +160,8 @@ oomkilled ()
 
 missingcni ()
 {
+	# This may not be a problem. The kubelet can try to start containers
+	# before the multus daemonset is started.
 	echo "===================================================="
 	echo "  Looking for 'Missing CNI default network' in the artifact files"
 	files=$(find ${dir} -type f )
