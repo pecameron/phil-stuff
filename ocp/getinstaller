@@ -20,7 +20,7 @@ echo " "
 echo $art
 tarfiles=$(wget ${art}  -O - | grep "linux-" | sed 's/<li><a href="//' | sed 's/"/ /' | gawk '{ print $1 }')
 
-rm ${installDir}/*.gz
+rm -f ${installDir}/*.gz
 for fil in ${tarfiles}
 do
 	(cd ${installDir} ; wget ${art}/${fil} ; tar xfz ${fil} )
