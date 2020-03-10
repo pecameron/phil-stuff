@@ -27,6 +27,7 @@ fi
 
 dateTag=$(date "+%Y%m%d")
 if [[ ${1:-XX} == "XX" ]] ; then
+	echo "token from: https://api.ci.openshift.org/oauth/token/request"
 	combinedSecret=$(ls -t ${HOME}/.secrets/combined-pull-secrets-* 2>/dev/null | gawk '{ print $1}' | head -1)
 	echo "Using ${combinedSecret}"
 	echo "to get a new secret"
