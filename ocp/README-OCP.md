@@ -89,3 +89,11 @@ For now, analysis is left to the user (may integrate it with debugbootstrap)
 $ get-ci-artifacts.sh save-dir http://----/artifacts/
 ```
 
+## getovsovn.sh
+Get the ovs, ovn nb, ovn sb databases for the cluster. Can be used for
+both SDN and OVN clusters.
+
+- `KUBECONFIG` must be set.
+
+- `ARTIFACT_DIR` is the optional location of the results (default ./artifact-dir)
+
