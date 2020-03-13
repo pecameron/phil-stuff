@@ -29,7 +29,7 @@ logb=$(ls ${tgtdir}/log-bundle-*.tar.gz | sed 's/.tar.gz//')
 echo ${logb}
 
 mkdir -p ${logb}
-tar  xfz ${logb}.tar.gz
+tar  xfz ${logb}.tar.gz -C ${tgtdir}
 }
 
 releaseImage () {
