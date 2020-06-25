@@ -1,0 +1,169 @@
+#!/bin/bash
+#set -x
+# cd to directory with extracted artifacts
+# OUT is the directory to put results
+# OUT=my-trace ./ovn_trace
+# ls my-trace
+
+out=${OUT:-trace_out}
+
+# Convert the date and add the prefix
+function convert_log_timestamp {
+  grep -e "^I" -e "^E" -e "^W" -e "^N" | \
+    sed 's/ /-/;s/^[IEWDN]/& /' | \
+    gawk '{ print $2  " | "  $0; }' | \
+    sed "s/|/ ${1} ${2} ${3} | /" | \
+    sed '/^[+a-zA-Z/]/d'
+}
+
+function convert_ovs_timestamp {
+  sed 's/2020-//;s/-//;s/T/-/;s/Z//' | \
+    sed "s/|/ ${1} ${2} ${3} | /" | \
+    sed '/^[+a-zA-Z/]/d'
+}
+
+function convert_journal_timestamp {
+  sed 's/Jan /01/; s/Feb /02/; s/Mar /03/; s/Apr /04/; s/May /05/; s/Jun /06/;
+    s/Jul /07/; s/Aug /08/; s/Sep /09/; s/Oct /10/; s/Nov /11/; s/Dec /12/;
+    s/ /-/' | sed '/^---/d'
+}
+
+function processLogs {
+  logs=$(find . -type f -name \*.log | grep -e "openshift-ovn-kubernetes_")
+  pods=$(find . -name pods.json | grep -v build-resources)
+  pds=$(jq '.items[].metadata.name' ${pods})
+
+  for log in ${logs} ; do
+    pdCn=$(basename $log | sed 's/_/ /g;s/\./ /g' | gawk '{ print $2 " " $3}')
+    pod=$(echo ${pdCn} | gawk '{ print $1 }')
+    con=$(echo ${pdCn} | gawk '{ print $2 }')
+    podd=\"$pod\"
+#   basename $log
+#   echo "    pod: $pod container: $con"
+
+    ind=0
+    for pd in ${pds} ; do
+      if [[ ${pd} == ${podd} ]] ; then
+        node=$(jq ".items[${ind}].spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchFields[0].values[0]" ${pods} | sed 's/"//g')
+        basename $log
+        echo "    $node --- $pod --- $con"
+        if [[ ${con} == "ovnkube-master" || ${con} == "ovnkube-node" ]] ; then
+          cat ${log} | convert_log_timestamp "${node}" "${pod}" "${con}" >> ${out}/trace.log
+        else
+          cat ${log} | convert_ovs_timestamp "${node}" "${pod}" "${con}" >> ${out}/trace.log
+        fi
+      fi
+
+      ind=$((ind+1))
+    done
+  done
+}
+
+function processJournals {
+  journals=$(find . -name \*-journal)
+  for journal in ${journals} ; do
+    echo ${journal}
+    grep  -e "crio\[" ${journal} | convert_journal_timestamp >> ${out}/trace.log
+    grep  -e "hyperkube" ${journal} | grep -e "\]: E" -e "SyncLoop" | convert_journal_timestamp >> ${out}/trace.log
+  done
+}
+
+# generate a trace of key parts of ovn startup
+function ovn_generate_startup_trace {
+  outS=${out}/startup.log
+  rm -f ${outS}
+  rm -f ${out}/ovn_startup_trace ${out}/ovn_startup_ready
+  touch ${outS}
+
+  # The trace records node-start, container start, election results, container ready
+  gawk '/Starting MCO environment/{ print $1 " " $2 "  Starting MCO environment on node"}' ${tf} >> ${outS}
+  echo " "
+
+  # Find first line in each ovn container and assume its the start.
+  grep -e "00001|vlog|INFO|opened log file" -e "ovn-controller | 00001|" -e "northd | 00001|reconnect" -e "Parsed config file" ${tf} \
+     | gawk '{ print $1 " " $2 " " $3 " " $4 "  Container starting" }' >> ${outS}
+
+  # container is "ready" when it transitions to handling requests
+  # sometimes we can tell, other times we assume we know.
+  # ovs is ready when br_int is set
+  grep -e "bridge br-int: added interface br-int on port" ${tf} | gawk '{ print $1 " " $2 " " $3 " " $4 "  OVS Ready" }' >> ${outS}
+  # ovn-controller ready
+  grep 'rconn|INFO|unix:/var/run/openvswitch/br-int.mgmt: connected' ${tf} | gawk '{ print $1 " " $2 " " $3 " " $4 "  Ready" }' >> ${outS}
+  # nbdb and sbdb - assumed ready after "peak resident set size after 10.0"
+  grep "peak resident set size after 10.0" ${tf} | grep " nbdb " |gawk '{ print $1 " " $2 " " $3 " " $4 "  nbdb Ready" }' >> ${outS}
+  grep "peak resident set size after 10.0" ${tf} | grep " sbdb " |gawk '{ print $1 " " $2 " " $3 " " $4 "  sbdb Ready" }' >> ${outS}
+  # ovnkube-master, ovnkube-node are ready when start watching config.
+  grep "Watching config file /run/ovnkube-config/ovnkube.conf" ${tf} | gawk '{ print $1 " " $2 " " $3 " " $4 "  Ready" }' >> ${outS}
+
+  # find the containers that won the election
+  # ovnkube-master
+  grep -e "won leader election" ${tf} | gawk '{ print $1 " " $2 " " $3 " " $4 "  ACTIVE" }' >> ${outS}
+  # nbdb and sbdb - the container that starts the election wins
+  grep -e "starting election" ${tf} | gawk '{ print $1 " " $2 " " $3 " " $4 "  ACTIVE" }' >> ${outS}
+  # northd - the active container does "Assigned dynamic"
+  grep -e "ovn_northd|INFO|Assigned dynamic" ${tf} | head -1 | gawk '{ print $1 " " $2 " " $3 " " $4 "  ACTIVE" }' >> ${outS}
+
+  sort ${outS} > ${out}/ovn_startup_trace
+  # don't delete, needed in ovn_show_errors
+  #rm -f ${outS}
+
+  # get all container sin Ready state
+  echo "ovn containers in ready state" > ${out}/ovn_startup_ready
+  grep "Ready" ${out}/ovn_startup_trace | gawk '{ print$2 " " $3 " " $4 " " $5 " " $6 }' | sort >> ${out}/ovn_startup_ready
+
+}
+
+# [WIP] trying to tease out any errors
+function ovn_show_errors {
+  # startup.log from ovn_generate_startup_trace
+  outS=${out}/startup.log
+  outE=${out}/error.log
+  cp ${outS} ${outE}
+  rm -f ${out}/ovn_error_trace
+
+  # look for common errors
+  grep -e "No CNI configuration file" ${tf} | gawk '{ print $1 " " $2 " " $3 "  ERROR- No CNI configuration file -ERROR" }' >> ${outE}
+  grep -e "Failed to initialize CSINode" ${tf} | gawk '{ print $1 " " $2 " " $3 "  ERROR- Failed to initialize CSINode -ERROR" }' >> ${outE}
+
+  sort ${outE} > ${out}/ovn_error_trace
+  rm -f ${outE}
+}
+
+function ovn_generate_trace {
+  rm -rf ${out}
+  mkdir -p ${out}
+  touch ${out}/trace.log
+  rm -f ${tf}
+
+  processLogs
+  processJournals
+
+  sort ${out}/trace.log > ${tf}
+  rm ${out}/trace.log
+}
+
+function setup {
+  pf=$(find . -name pods.json | grep -v build-resources)
+  if [[ $? -ne 0 ]] ; then
+    echo "collected artifacts doesn't contain a pods.json file"
+    exit 1
+  fi
+  jq '.items[].metadata.namespace' ${pf} | grep openshift-ovn-kubernetes > /dev/null 2>&1
+  if [[ $? -ne 0 ]] ; then
+    echo "collected artifacts are not for an openshift-ovn-kubernetes cluster"
+    exit 2
+  fi
+}
+
+# --------------
+# output trace file
+tf=${out}/ovn_trace
+
+# quick check to verify the artifacts are from an openshift-ovn-kubernetes cluster
+setup 
+
+ovn_generate_trace
+
+ovn_generate_startup_trace
+
+ovn_show_errors
