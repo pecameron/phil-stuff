@@ -1,0 +1,55 @@
+/home/pcameron/Desktop/trace-ovn/ovn/https:/gcsweb-ci.svc.ci.openshift.org/gcs/origin-ci-test/pr-logs/pull/openshift_ovn-kubernetes/194/pull-ci-openshift-ovn-kubernetes-master-e2e-gcp-ovn/1275048833591545856/artifacts/e2e-gcp-ovn
+
+$ jq '.items[223,224].metadata.name,.items[223,224].spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchFields[0].values[0]' pods.json 
+"ovs-node-9s7h4"
+"ovs-node-crlng"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-d-89sfx"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-b-qsx2f"
+
+$ jq '.items[214,228].metadata.name' pods.json 
+"ovnkube-master-8g2mt"
+"ovs-node-w748j"
+
+$ jq '.items[214,215,216,217,218,219,220,221,222,223,224,225,226,227,228].metadata.name,.items[214,215,216,217,218,219,220,221,222,223,224,225,226,227,228].spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchFields[0].values[0]' pods.json 
+"ovnkube-master-8g2mt"
+"ovnkube-master-dlnn6"
+"ovnkube-master-xst4d"
+"ovnkube-node-bg8gp"
+"ovnkube-node-kkv88"
+"ovnkube-node-m2tcj"
+"ovnkube-node-rpf5n"
+"ovnkube-node-rxnnq"
+"ovnkube-node-sbzmv"
+"ovs-node-9s7h4"
+"ovs-node-crlng"
+"ovs-node-qhbhn"
+"ovs-node-rqcz4"
+"ovs-node-v7fqr"
+"ovs-node-w748j"
+"ci-op-ns0pyr56-99b10-ww6mq-master-1"
+"ci-op-ns0pyr56-99b10-ww6mq-master-2"
+"ci-op-ns0pyr56-99b10-ww6mq-master-0"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-b-qsx2f"
+"ci-op-ns0pyr56-99b10-ww6mq-master-2"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-d-89sfx"
+"ci-op-ns0pyr56-99b10-ww6mq-master-1"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-c-bbrwk"
+"ci-op-ns0pyr56-99b10-ww6mq-master-0"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-d-89sfx"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-b-qsx2f"
+"ci-op-ns0pyr56-99b10-ww6mq-worker-c-bbrwk"
+"ci-op-ns0pyr56-99b10-ww6mq-master-2"
+"ci-op-ns0pyr56-99b10-ww6mq-master-0"
+"ci-op-ns0pyr56-99b10-ww6mq-master-1"
+
+
+
+------------------
+find . -name \*-journal
+grep -e "crio\[" -e "SyncLoop" ./nodes/masters-journal ./nodes/workers-journal
+
+kubelet.go pod_workers.go hyperkube
+event.go
+NetworkNotReady Has your network provider started
+grep  -e "hyperkube" -e "crio\["  nodes/*-journal 
+
